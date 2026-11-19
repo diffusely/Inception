@@ -1,0 +1,48 @@
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout;
+    sendfile on;
+
+    server {
+        # The only open port is 443, and only with TLS
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        server_name ${DOMAIN_NAME};
+
+        ssl_certificate     /etc/nginx/ssl/inception.crt;
+        ssl_certificate_key /etc/nginx/ssl/inception.key;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+
+        # Same volume as WordPress: NGINX serves static files (images, css) itself
+        root /var/www/html;
+        index index.php index.html;
+
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        # Anything ending in .php is sent to the wordpress container (php-fpm, port 9000)
+        location ~ \.php$ {
+            try_files $uri =404;
+            include fastcgi_params;
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+            fastcgi_pass wordpress:9000;
+        }
+
+        location ~ /\.ht {
+            deny all;
+        }
+    }
+}

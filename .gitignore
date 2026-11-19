@@ -1,0 +1,3 @@
+# Secrets and local settings must never end up in git
+srcs/.env
+secrets/

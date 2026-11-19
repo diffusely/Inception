@@ -1,0 +1,10 @@
+[mysqld]
+user                 = mysql
+port                 = 3306
+# listen on all container interfaces, otherwise WordPress in another container cannot connect
+bind-address         = 0.0.0.0
+datadir              = /var/lib/mysql
+socket               = /run/mysqld/mysqld.sock
+skip-name-resolve
+character-set-server = utf8mb4
+collation-server     = utf8mb4_general_ci

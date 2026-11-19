@@ -1,0 +1,85 @@
+# Describes the whole "system": which containers exist, how they are connected, where data lives.
+
+name: inception
+
+services:
+
+  # 1) Database. Not exposed to the outside - only WordPress reaches it over the internal network.
+  mariadb:
+    container_name: mariadb
+    image: mariadb:1.0
+    build: ./requirements/mariadb
+    env_file: .env
+    secrets: [db_root_password, db_password]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks: [inception]
+    restart: unless-stopped
+    expose: ["3306"]
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  # 2) WordPress + php-fpm. Runs the PHP code but does not accept web requests itself.
+  wordpress:
+    container_name: wordpress
+    image: wordpress:1.0
+    build: ./requirements/wordpress
+    env_file: .env
+    secrets: [db_password, wp_admin_password, wp_user_password]
+    volumes:
+      - wordpress_data:/var/www/html
+    networks: [inception]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+    expose: ["9000"]
+
+  # 3) NGINX - the only door to the outside: port 443 only, TLS only.
+  nginx:
+    container_name: nginx
+    image: nginx:1.0
+    build: ./requirements/nginx
+    env_file: .env
+    volumes:
+      - wordpress_data:/var/www/html:ro
+    networks: [inception]
+    depends_on: [wordpress]
+    restart: unless-stopped
+    ports:
+      - "443:443"
+
+# Volumes: "named", but physically stored in /home/LOGIN/data (the subject requires this).
+volumes:
+  mariadb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/${LOGIN}/data/mariadb
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/${LOGIN}/data/wordpress
+
+# Own internal network: containers find each other by name (mariadb, wordpress).
+networks:
+  inception:
+    driver: bridge
+
+# Passwords live in files and are mounted into containers as /run/secrets/<name>.
+secrets:
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  db_password:
+    file: ../secrets/db_password.txt
+  wp_admin_password:
+    file: ../secrets/wp_admin_password.txt
+  wp_user_password:
+    file: ../secrets/wp_user_password.txt
